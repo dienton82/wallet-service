@@ -1,5 +1,8 @@
-
 # Wallet Service
+
+[![Wallet Service CI](https://github.com/dienton82/wallet-service/actions/workflows/ci.yml/badge.svg)](https://github.com/dienton82/wallet-service/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.22%2B-00ADD8)
+![Cobertura local](https://img.shields.io/badge/Cobertura%20local-100%25-brightgreen)
 
 ## Descripción
 
@@ -16,7 +19,7 @@ También implementé los puntos opcionales de la prueba y agregué GitHub Action
 - Docker.
 - Git y GitHub Actions.
 
-No fue necesario utilizar frameworks ni instalar dependencias externas.
+Decidí trabajar con las librerías propias de Go porque para lo solicitado no era necesario agregar frameworks ni dependencias externas.
 
 ## Estructura del proyecto
 
@@ -81,6 +84,8 @@ Ejecutar:
 go run ./cmd/api
 ```
 
+La información se almacena en memoria, por lo que se pierde al reiniciar el servicio.
+
 El servicio queda disponible en:
 
 ```text
@@ -139,7 +144,7 @@ Respuesta:
 
 POST /transfers
 
-Para este ejemplo se deben crear previamente las dos cuentas.
+Para este ejemplo se deben crear previamente las dos cuentas. Después de crear la cuenta de Ana, se puede crear otra con `POST /accounts` y el cuerpo `{"owner":"Carlos","initial_balance":5000}`. Los identificadores se obtienen de las respuestas.
 
 Solicitud:
 
@@ -188,12 +193,14 @@ Esta consulta muestra las transferencias enviadas y recibidas de la cuenta. Si n
 Para la creación de cuentas y transferencias tuve en cuenta los siguientes casos:
 
 - Nombre del titular vacío.
-- Saldo inicial negativo.
+- Saldo inicial negativo, omitido o nulo. El saldo cero sí es válido.
+- Identificadores de origen o destino omitidos, vacíos o nulos.
 - Montos menores o iguales a cero.
 - Cuentas que no existen.
 - Transferencias entre la misma cuenta.
 - Fondos insuficientes.
-- Datos JSON incorrectos.
+- Datos JSON incorrectos o solicitudes con más de un objeto JSON.
+- Rutas no normalizadas, que se rechazan con un 404 en JSON sin redirección.
 - Saldos que superen el límite permitido.
 
 Los errores se retornan en formato JSON.
@@ -215,17 +222,17 @@ Por ejemplo:
 | 422 | Fondos insuficientes |
 | 500 | Error interno del servidor |
 
-## Decisiones que tomé durante el desarrollo
+## Tres decisiones técnicas que tomé durante el desarrollo
 
-### Manejo de los saldos
+### 1. Manejo de los saldos
 
-Decidí manejar los valores en centavos utilizando int64 para evitar problemas de precisión con los decimales.
+Decidí manejar los valores en centavos utilizando `int64` para evitar problemas de precisión con los decimales.
 
 También agregué una validación para evitar que el saldo de una cuenta supere el valor máximo permitido.
 
-### Manejo de las transferencias concurrentes
+### 2. Manejo de las transferencias concurrentes
 
-Para este caso utilicé sync.RWMutex.
+Para este caso utilicé `sync.RWMutex`.
 
 La idea es que mientras se está realizando una transferencia, otra solicitud no pueda modificar los saldos de las cuentas.
 
@@ -233,19 +240,15 @@ Primero se realizan todas las validaciones y, si todo está correcto, se descuen
 
 Si alguna validación falla, no se modifican los saldos.
 
-Para las consultas utilicé RLock, permitiendo que se puedan realizar varias lecturas al mismo tiempo.
+Para las consultas utilicé `RLock`, permitiendo que se puedan realizar varias lecturas al mismo tiempo.
 
 Por el alcance de la prueba decidí manejar un solo bloqueo para las operaciones de escritura, aunque más adelante se podría mejorar este proceso para manejar un mayor volumen de transferencias.
 
-### Organización del código
+### 3. Organización del código
 
 Preferí separar los modelos, las solicitudes HTTP, la lógica del negocio y el almacenamiento.
 
 De esta manera no queda toda la lógica dentro de los endpoints y es más fácil realizar pruebas o identificar en qué parte del código se debe hacer un ajuste.
-
-### Librerías de Go
-
-Decidí trabajar con las librerías propias de Go porque para lo solicitado en la prueba no vi la necesidad de agregar dependencias externas.
 
 ## Funcionalidades adicionales
 
@@ -259,7 +262,7 @@ Idempotency-Key: transfer-001
 
 Si se vuelve a enviar la misma solicitud con la misma clave, se retorna la transferencia que ya se había registrado sin afectar nuevamente los saldos.
 
-Si se utiliza la misma clave con datos diferentes, se retorna un error 409.
+Si se utiliza la misma clave con datos diferentes, se retorna un error 409. Las claves se guardan en memoria y se pierden al reiniciar el servicio.
 
 ### Logs
 
@@ -267,13 +270,13 @@ Utilicé log/slog para generar los logs en formato JSON y poder identificar los 
 
 ### Apagado del servidor
 
-Implementé Graceful Shutdown para que al detener el servidor se permita finalizar las solicitudes que se están ejecutando, con un tiempo máximo de espera.
+Implementé Graceful Shutdown para que al detener el servidor se permita finalizar las solicitudes que se están ejecutando, con un tiempo máximo de espera de 10 segundos.
 
 ### Docker
 
 Configuré el Dockerfile en dos etapas. En la primera se compila el proyecto y en la segunda se copia únicamente el ejecutable.
 
-Con esto se busca tener una imagen más liviana y ejecutar el servicio sin permisos de administrador.
+Con esto se busca tener una imagen más liviana y ejecutar el servicio como usuario sin privilegios de root.
 
 ## Pruebas realizadas
 
@@ -286,7 +289,7 @@ Adicionalmente, realicé pruebas de fondos insuficientes, idempotencia concurren
 Ejecutar todas las pruebas:
 
 ```bash
-go test -v ./...
+go test -v -count=1 ./...
 ```
 
 Validar condiciones de carrera:
@@ -327,7 +330,7 @@ Generar el reporte HTML:
 go tool cover "-html=coverage.out" -o coverage.html
 ```
 
-En las pruebas realizadas localmente obtuve una cobertura de sentencias del 100%.
+Después de los últimos ajustes ejecuté nuevamente las pruebas y obtuve una cobertura global de sentencias del 100%. También pasaron las pruebas de rutas no normalizadas, campos obligatorios y creación de cuentas con saldo cero.
 
 ```text
 total: (statements) 100.0%
@@ -377,7 +380,9 @@ Como algo adicional a lo solicitado, configuré GitHub Actions para que al subir
 - Validación de los endpoints.
 - Idempotencia y apagado del servidor.
 
-La validación de Docker se realizará desde el ambiente Linux de GitHub Actions.
+La primera ejecución de GitHub Actions terminó correctamente, tanto en las validaciones de Go como en la construcción y ejecución del contenedor Docker. Allí comprobé los endpoints, la idempotencia, los saldos y el apagado ordenado.
+
+Los resultados de cada ejecución y el reporte de cobertura (`coverage-report`) se pueden consultar en [GitHub Actions](https://github.com/dienton82/wallet-service/actions).
 
 ## Qué mejoraría si tuviera más tiempo
 
