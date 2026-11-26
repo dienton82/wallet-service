@@ -1,0 +1,29 @@
+
+# Control de versiones.
+.git
+.gitignore
+.github
+
+# Configuración de editores.
+.vscode
+.idea
+.history
+
+# Reportes de cobertura y pruebas.
+coverage.out
+coverage.html
+*.out
+*.test
+
+# Archivos compilados y logs.
+*.exe
+*.log
+bin/
+dist/
+
+# Variables de entorno.
+.env
+.env.*
+
+# Documentación.
+README.md
