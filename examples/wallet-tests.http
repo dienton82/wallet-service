@@ -1,0 +1,150 @@
+# Wallet Service - Pruebas manuales de la API
+# Prueba técnica - Periferia IT Group
+# Ejecutar go run ./cmd/api antes de iniciar.
+# Usar un servidor recién iniciado y ejecutar las solicitudes en orden.
+# Los datos se almacenan en memoria y los montos están en centavos.
+# Ejecutar cada POST una sola vez, excepto la prueba de idempotencia.
+
+@baseUrl = http://localhost:8080
+
+### 01. Crear cuenta de Ana - 201 Created
+POST {{baseUrl}}/accounts
+Content-Type: application/json
+
+{
+    "owner": "Ana",
+    "initial_balance": 10000
+}
+
+### 02. Crear cuenta de Juan - 201 Created
+POST {{baseUrl}}/accounts
+Content-Type: application/json
+
+{
+    "owner": "Juan",
+    "initial_balance": 5000
+}
+
+### 03. Consultar cuenta de Ana - 200 OK, saldo 10000
+GET {{baseUrl}}/accounts/acc_1
+
+### 04. Consultar cuenta de Juan - 200 OK, saldo 5000
+GET {{baseUrl}}/accounts/acc_2
+
+### 05. Transferir de Ana a Juan - 201 Created, trf_1
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_2",
+    "amount": 2500
+}
+
+### 06. Consultar saldo de Ana - 200 OK, saldo 7500
+GET {{baseUrl}}/accounts/acc_1
+
+### 07. Consultar saldo de Juan - 200 OK, saldo 7500
+GET {{baseUrl}}/accounts/acc_2
+
+### 08. Consultar historial de Ana - 200 OK, trf_1
+GET {{baseUrl}}/accounts/acc_1/transfers
+
+### 09. Consultar historial de Juan - 200 OK, trf_1
+GET {{baseUrl}}/accounts/acc_2/transfers
+
+### 10. Crear cuenta de Carlos sin saldo - 201 Created
+POST {{baseUrl}}/accounts
+Content-Type: application/json
+
+{
+    "owner": "Carlos",
+    "initial_balance": 0
+}
+
+### 11. Consultar historial vacío de Carlos - 200 OK, []
+GET {{baseUrl}}/accounts/acc_3/transfers
+
+### 12. Validar fondos insuficientes - 422 Unprocessable Entity
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_2",
+    "amount": 10000
+}
+
+### 13. Comprobar saldo de Ana tras el rechazo - 200 OK, saldo 7500
+GET {{baseUrl}}/accounts/acc_1
+
+### 14. Comprobar saldo de Juan tras el rechazo - 200 OK, saldo 7500
+GET {{baseUrl}}/accounts/acc_2
+
+### 15. Validar monto cero - 400 Bad Request
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_2",
+    "amount": 0
+}
+
+### 16. Validar transferencia a la misma cuenta - 400 Bad Request
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_1",
+    "amount": 1000
+}
+
+### 17. Consultar cuenta inexistente - 404 Not Found
+GET {{baseUrl}}/accounts/acc_999
+
+### 18. Crear transferencia con clave de idempotencia - 201 Created, trf_2
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: prueba-manual-001
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_2",
+    "amount": 1000
+}
+
+### 19. Repetir la transferencia - 201 Created, mismo ID y fecha de creación
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: prueba-manual-001
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_2",
+    "amount": 1000
+}
+
+### 20. Reutilizar la clave con otro monto - 409 Conflict
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: prueba-manual-001
+
+{
+    "from_account_id": "acc_1",
+    "to_account_id": "acc_2",
+    "amount": 2000
+}
+
+### 21. Consultar saldo final de Ana - 200 OK, saldo 6500
+GET {{baseUrl}}/accounts/acc_1
+
+### 22. Consultar saldo final de Juan - 200 OK, saldo 8500
+GET {{baseUrl}}/accounts/acc_2
+
+### 23. Consultar historial final de Ana - 200 OK, trf_1 y trf_2
+GET {{baseUrl}}/accounts/acc_1/transfers
+
+### 24. Consultar historial final de Juan - 200 OK, trf_1 y trf_2
+GET {{baseUrl}}/accounts/acc_2/transfers
