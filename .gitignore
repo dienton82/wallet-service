@@ -1,0 +1,31 @@
+# Archivos compilados
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+/bin/
+/dist/
+
+# Resultados y cobertura de pruebas
+*.out
+coverage.html
+
+# Variables de entorno
+.env
+.env.*
+
+# Configuración local del editor
+.vscode/
+.idea/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de logs
+*.log
+
+# Historial local del editor
+.history/
