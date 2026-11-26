@@ -29,3 +29,7 @@ Thumbs.db
 
 # Historial local del editor
 .history/
+
+# Reportes de cobertura.
+ /coverage
+/coverage
