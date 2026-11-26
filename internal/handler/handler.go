@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"path"
 
 	"github.com/dienton82/wallet-service/internal/service"
 )
@@ -15,7 +16,7 @@ type Handler struct {
 // Datos necesarios para crear una cuenta.
 type createAccountRequest struct {
 	Owner          string `json:"owner"`
-	InitialBalance int64  `json:"initial_balance"`
+	InitialBalance *int64 `json:"initial_balance"`
 }
 
 // Datos necesarios para realizar una transferencia.
@@ -41,11 +42,22 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /transfers", h.createTransfer)
 	mux.HandleFunc("GET /accounts/{id}/transfers", h.getAccountTransfers)
 
-	// Controlamos las rutas y métodos no permitidos
-	// para mantener las respuestas en formato JSON.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Evitamos redirecciones automáticas que generen
+		// respuestas fuera del formato JSON.
+		if path.Clean(r.URL.EscapedPath()) != r.URL.EscapedPath() {
+			writeError(
+				w,
+				http.StatusNotFound,
+				"ruta no encontrada",
+			)
+			return
+		}
+
 		_, pattern := mux.Handler(r)
 
+		// Controlamos las rutas y métodos no permitidos
+		// para mantener las respuestas en formato JSON.
 		if pattern == "" {
 			for _, method := range []string{
 				http.MethodGet,
@@ -94,9 +106,20 @@ func (h *Handler) createAccount(
 		return
 	}
 
+	// Validamos que el saldo inicial haya sido enviado.
+	// El valor cero es válido para crear una cuenta.
+	if request.InitialBalance == nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"el saldo inicial es obligatorio",
+		)
+		return
+	}
+
 	account, err := h.wallet.CreateAccount(
 		request.Owner,
-		request.InitialBalance,
+		*request.InitialBalance,
 	)
 
 	if err != nil {
@@ -136,6 +159,16 @@ func (h *Handler) createTransfer(
 			w,
 			http.StatusBadRequest,
 			"el cuerpo de la solicitud contiene un JSON inválido",
+		)
+		return
+	}
+
+	// Validamos que se hayan enviado las cuentas de la transferencia.
+	if request.FromAccountID == "" || request.ToAccountID == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"las cuentas de origen y destino son obligatorias",
 		)
 		return
 	}

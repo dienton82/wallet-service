@@ -689,3 +689,112 @@ func TestHandleErrorHTTP(t *testing.T) {
 		})
 	}
 }
+
+// Validamos que las rutas no normalizadas respondan en JSON
+// sin generar redirecciones automáticas.
+func TestNonCanonicalRoutesHTTP(t *testing.T) {
+	api := newTestHandler()
+
+	paths := []string{
+		"/accounts//acc_1",
+		"/accounts/./acc_1",
+		"/accounts/../transfers",
+		"/accounts/acc_1/",
+		"/transfers/",
+	}
+
+	for _, route := range paths {
+		t.Run(route, func(t *testing.T) {
+			response := executeRequest(
+				api,
+				http.MethodGet,
+				route,
+				"",
+				"",
+			)
+
+			assertErrorResponse(t, response, http.StatusNotFound)
+
+			if response.Header().Get("Location") != "" {
+				t.Error("no se esperaba una redirección")
+			}
+		})
+	}
+}
+
+// Validamos que el saldo inicial sea obligatorio.
+func TestRequiredInitialBalanceHTTP(t *testing.T) {
+	api := newTestHandler()
+
+	bodies := []string{
+		`{"owner":"Ana"}`,
+		`{"owner":"Ana","initial_balance":null}`,
+	}
+
+	for _, body := range bodies {
+		response := executeRequest(
+			api,
+			http.MethodPost,
+			"/accounts",
+			body,
+			"",
+		)
+
+		assertErrorResponse(t, response, http.StatusBadRequest)
+	}
+}
+
+// Una cuenta puede crearse con saldo inicial en cero.
+func TestCreateAccountWithZeroBalanceHTTP(t *testing.T) {
+	api := newTestHandler()
+
+	account := createHTTPAccount(
+		t,
+		api,
+		`{"owner":"Ana","initial_balance":0}`,
+	)
+
+	if account.Balance != 0 {
+		t.Error("el saldo inicial debe ser cero")
+	}
+}
+
+// Validamos que una transferencia tenga todos los datos necesarios.
+func TestRequiredTransferFieldsHTTP(t *testing.T) {
+	api := newTestHandler()
+
+	createHTTPAccount(
+		t, api,
+		`{"owner":"Ana","initial_balance":10000}`,
+	)
+
+	createHTTPAccount(
+		t, api,
+		`{"owner":"Carlos","initial_balance":5000}`,
+	)
+
+	bodies := []string{
+		`{"to_account_id":"acc_2","amount":100}`,
+		`{"from_account_id":"acc_1","amount":100}`,
+		`{"from_account_id":"","to_account_id":"","amount":100}`,
+		`{"from_account_id":null,"to_account_id":"acc_2","amount":100}`,
+		`{"from_account_id":"acc_1","to_account_id":"acc_2"}`,
+		`{"from_account_id":"acc_1","to_account_id":"acc_2","amount":null}`,
+	}
+
+	for _, body := range bodies {
+		response := executeRequest(
+			api,
+			http.MethodPost,
+			"/transfers",
+			body,
+			"",
+		)
+
+		assertErrorResponse(t, response, http.StatusBadRequest)
+	}
+
+	// Verificamos que ninguna solicitud haya modificado los saldos.
+	assertHTTPBalance(t, api, "acc_1", 10000)
+	assertHTTPBalance(t, api, "acc_2", 5000)
+}
